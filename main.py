@@ -58,9 +58,11 @@ def generate_answer_with_gemini(question: str, context: str) -> str:
         response = model.generate_content(prompt)
         # Ensure there is content in the response before accessing .text
         if response.parts:
+            print("Gemini Pro responded successfully.")
             return response.text.strip()
         else:
             # This handles cases where the response might be blocked for safety reasons
+            print("Gemini Pro response was empty.")
             return "The model's response was empty. This may be due to safety filters."
             
     except Exception as e:
@@ -82,6 +84,8 @@ async def hackrx_run(data: DocumentData, authorization: str = Header(None)):
     if token != HACKATHON_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key.")
     
+    print(f"Request received with API key. Document URL: {data.documents}")
+    
     # 2. Process the request
     document_url = data.documents
     questions = data.questions
@@ -90,17 +94,26 @@ async def hackrx_run(data: DocumentData, authorization: str = Header(None)):
 
     # Step A: Fetch, Chunk, Embed, and Index the Document
     print("\n--- Starting Document Processing ---")
+    
+    # Check 1: Before fetching the document
+    print("Fetching document from URL...")
     document_content = get_document_text(document_url)
     if not document_content:
         raise HTTPException(status_code=500, detail="Failed to retrieve or process document content.")
+    # Check 2: After fetching the document
+    print("Document successfully fetched. Splitting into chunks...")
         
     chunks = split_text_into_chunks(document_content)
     if not chunks:
         raise HTTPException(status_code=500, detail="Failed to split document into chunks.")
 
+    # Check 3: Before generating embeddings
+    print("Generating embeddings...")
     embeddings = generate_embeddings(chunks)
     if not embeddings:
         raise HTTPException(status_code=500, detail="Failed to generate embeddings for document chunks.")
+    # Check 4: After generating embeddings
+    print("Embeddings generated. Indexing in Pinecone...")
         
     index_chunks_in_pinecone(chunks, embeddings, index_name)
     print("--- Document Processing and Indexing Complete ---\n")
@@ -112,25 +125,30 @@ async def hackrx_run(data: DocumentData, authorization: str = Header(None)):
         index = pc.Index(index_name)
         
         for question in questions:
-            # Create embedding for the question
+            # Check 5: Before generating question embedding
+            print(f"Generating embedding for question: '{question}'")
             question_embedding_response = genai.embed_content(
                 model="models/embedding-001",
                 content=question,
-                task_type="retrieval_query" # Specify task_type for better query embeddings
+                task_type="retrieval_query"
             )
             question_embedding = question_embedding_response['embedding']
+            # Check 6: After generating question embedding
+            print("Question embedding generated. Searching Pinecone...")
             
-            # Search Pinecone for relevant context
+            # Check 7: Before searching Pinecone
             search_results = index.query(
                 vector=question_embedding,
-                top_k=5, # Increased to 5 for more context
+                top_k=5,
                 include_metadata=True
             )
+            # Check 8: After searching Pinecone
+            print(f"Pinecone search complete. Found {len(search_results.matches)} matches. Calling Gemini Pro...")
             
             context_chunks = [match.metadata['text'] for match in search_results.matches]
             context = "\n\n".join(context_chunks)
             
-            # Generate the final answer using Gemini Pro
+            # Check 9: Before calling the Gemini Pro RAG function
             answer = generate_answer_with_gemini(question, context)
             answers.append(answer)
 
