@@ -5,6 +5,7 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
+import hashlib
 
 # Load environment variables from .env file
 load_dotenv()
@@ -43,6 +44,10 @@ def get_document_text(url: str) -> str:
         return ""
 
     return document_text
+
+def create_document_id(url: str) -> str:
+    """Creates a stable SHA256 hash of the URL to use as a document ID."""
+    return hashlib.sha256(url.encode()).hexdigest()
 
 def split_text_into_chunks(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list[str]:
     """
@@ -100,14 +105,16 @@ def generate_embeddings(text_chunks: list[str]) -> list:
     
     return embeddings
 
-def index_chunks_in_pinecone(chunks: list[str], embeddings: list, index_name: str):
+# In data_processor.py
+
+def index_chunks_in_pinecone(chunks: list[str], embeddings: list, index_name: str, namespace: str):
     """
-    Indexes the text chunks and their embeddings in Pinecone.
+    Indexes the text chunks and their embeddings in a specific Pinecone namespace.
     """
-    print(f"Indexing {len(chunks)} chunks in Pinecone index '{index_name}'...")
+    print(f"Indexing {len(chunks)} chunks in Pinecone index '{index_name}' under namespace '{namespace}'...")
     try:
         # Check if index exists, and create if it doesn't
-        if index_name not in [index.name for index in pc.list_indexes()]:
+        if index_name not in pc.list_indexes().names():
             print(f"Creating new Pinecone index: '{index_name}'")
             pc.create_index(
                 name=index_name,
@@ -116,29 +123,33 @@ def index_chunks_in_pinecone(chunks: list[str], embeddings: list, index_name: st
                 spec=ServerlessSpec(cloud='aws', region='us-east-1')
             )
             print("Index created successfully. Waiting for it to become ready...")
-            while not pc.describe_index(index_name).status.ready:
+            # Wait for index to be ready
+            while not pc.describe_index(index_name).status['ready']:
                 import time
                 time.sleep(1)
 
         index = pc.Index(index_name)
         
-        # Prepare data for upsert using a very explicit loop
+        # Prepare data for upsert
         vectors_to_upsert = []
-        for i in range(len(chunks)):
+        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             vectors_to_upsert.append({
-                "id": f"chunk-{i}",
-                "values": embeddings[i],
-                "metadata": {"text": chunks[i]}
+                "id": f"chunk-{namespace}-{i}", # Make ID unique across namespaces
+                "values": embedding,
+                "metadata": {"text": chunk}
             })
         
-        # Upsert in batches to improve performance
+        # Upsert in batches
         batch_size = 100
         for i in range(0, len(vectors_to_upsert), batch_size):
             batch = vectors_to_upsert[i:i + batch_size]
-            index.upsert(vectors=batch)
-            print(f"Upserted batch {i // batch_size + 1}")
+            index.upsert(vectors=batch, namespace=namespace) # <-- USE THE NAMESPACE
+            print(f"Upserted batch {i // batch_size + 1} into namespace '{namespace}'")
 
-        print(f"Successfully indexed {len(chunks)} chunks.")
+        print(f"Successfully indexed {len(chunks)} chunks in namespace '{namespace}'.")
+        # Give a moment for the index to become queryable
+        time.sleep(5) 
+        
     except Exception as e:
         print(f"Error indexing in Pinecone: {e}")
         
