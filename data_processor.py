@@ -124,7 +124,7 @@ def index_chunks_in_pinecone(chunks: list[str], embeddings: list, index_name: st
             )
             print("Index created successfully. Waiting for it to become ready...")
             # Wait for index to be ready
-            while not pc.describe_index(index_name).status['ready']:
+            while not pc.describe_index(index_name).status.ready:
                 import time
                 time.sleep(1)
 
@@ -170,7 +170,9 @@ if __name__ == "__main__":
             print(f"Size of each embedding vector: {len(embeddings[0])}")
 
             # Index the chunks in Pinecone
-            index_chunks_in_pinecone(chunks, embeddings, index_name)
+            print("--- Running standalone script test ---")
+            test_namespace = create_document_id(sample_url) # Use the new function!
+            index_chunks_in_pinecone(chunks, embeddings, index_name, namespace=test_namespace)
         else:
             print("Failed to generate embeddings. Pinecone indexing skipped.")
 
