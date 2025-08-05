@@ -85,20 +85,19 @@ async def hackrx_run(data: DocumentData, authorization: str = Header(None)):
     This is the main endpoint for the HackRx 6.0 submission.
     It processes a document and answers questions based on it using Gemini and Pinecone.
     """
-    # 1. API Key Authentication
+    # 1. API Key Authentication (No changes here)
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authorization header missing or invalid.")
     
     token = authorization.split(" ")[1]
     if token != HACKATHON_API_KEY:
-        print(f"Authentication failed. Received token: {token}") # Helpful for debugging
+        print(f"Authentication failed. Received token: {token}")
         raise HTTPException(status_code=401, detail="Invalid API Key.")
     
     document_url = data.documents
     questions = data.questions
     index_name = "hackrx-policy-index"
 
-    # Create a unique, stable ID for the document to use as a namespace
     doc_id_namespace = create_document_id(document_url)
     print(f"Request received. Document URL: {document_url}")
     print(f"Using Pinecone Namespace: {doc_id_namespace}")
@@ -106,14 +105,17 @@ async def hackrx_run(data: DocumentData, authorization: str = Header(None)):
     try:
         index = pc.Index(index_name)
 
-        # Step A: Check if document is already processed and indexed
-        # We can do this by checking the vector count in the namespace.
+        # --- CHANGE 1 START: More robust check for processed documents ---
         stats = index.describe_index_stats()
-        namespace_exists = doc_id_namespace in stats.get('namespaces', {})
-        
-        if not namespace_exists:
-            print(f"Namespace '{doc_id_namespace}' not found. Starting full processing pipeline...")
-            # --- Full processing pipeline for a new document ---
+        # A namespace is considered fully processed only if it exists AND has vectors in it.
+        vector_count = stats.get('namespaces', {}).get(doc_id_namespace, {}).get('vector_count', 0)
+        is_processed = vector_count > 0
+
+        print(f"Checking processing status for namespace. Found {vector_count} vectors. Is processed: {is_processed}")
+
+        if not is_processed:
+            print(f"Namespace '{doc_id_namespace}' not processed. Starting full processing pipeline...")
+            # This is the full processing pipeline for a new document
             document_content = get_document_text(document_url)
             if not document_content:
                 raise HTTPException(status_code=500, detail="Failed to retrieve or process document content.")
@@ -126,11 +128,12 @@ async def hackrx_run(data: DocumentData, authorization: str = Header(None)):
             if not embeddings:
                 raise HTTPException(status_code=500, detail="Failed to generate embeddings for document chunks.")
             
-            # Index using the specific namespace
             index_chunks_in_pinecone(chunks, embeddings, index_name, namespace=doc_id_namespace)
             print("--- New Document Processing and Indexing Complete ---")
         else:
-            print(f"Document already indexed in namespace '{doc_id_namespace}'. Skipping to question answering.")
+            print(f"Document already processed in namespace '{doc_id_namespace}'. Skipping to question answering.")
+        # --- CHANGE 1 END ---
+
 
         # Step B: Answer each question using the indexed document
         print("--- Answering Questions ---")
@@ -146,18 +149,27 @@ async def hackrx_run(data: DocumentData, authorization: str = Header(None)):
             )
             question_embedding = question_embedding_response['embedding']
             
-            # 2. Query Pinecone in the correct namespace
+            # 2. Query Pinecone
             search_results = index.query(
                 vector=question_embedding,
                 top_k=5,
                 include_metadata=True,
-                namespace=doc_id_namespace # <-- QUERY THE CORRECT NAMESPACE
+                namespace=doc_id_namespace
             )
             
-            # 3. Generate the answer
+            # --- CHANGE 2 START: Add debug logging ---
+            print(f"Pinecone query returned {len(search_results.matches)} matches.")
+            
             context_chunks = [match.metadata['text'] for match in search_results.matches]
             context = "\n\n".join(context_chunks)
-            
+
+            if context:
+                print(f"Context being sent to Gemini: {context[:400]}...") # Print first 400 chars
+            else:
+                print("Context being sent to Gemini is EMPTY.")
+            # --- CHANGE 2 END ---
+
+            # 3. Generate the answer
             answer = generate_answer_with_gemini(question, context)
             answers.append(answer)
 
@@ -166,5 +178,4 @@ async def hackrx_run(data: DocumentData, authorization: str = Header(None)):
 
     except Exception as e:
         print(f"An error occurred during the main process: {e}")
-        # Be careful not to expose too much detail in production errors
         raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
