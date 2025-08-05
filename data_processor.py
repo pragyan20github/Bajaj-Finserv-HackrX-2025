@@ -6,6 +6,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 import hashlib
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -125,7 +126,6 @@ def index_chunks_in_pinecone(chunks: list[str], embeddings: list, index_name: st
             print("Index created successfully. Waiting for it to become ready...")
             # Wait for index to be ready
             while not pc.describe_index(index_name).status.ready:
-                import time
                 time.sleep(1)
 
         index = pc.Index(index_name)
