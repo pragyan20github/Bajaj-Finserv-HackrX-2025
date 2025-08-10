@@ -18,20 +18,31 @@ PINECONE_ENVIRONMENT = os.environ.get("PINECONE_ENVIRONMENT")
 genai.configure(api_key=GOOGLE_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
 
-def get_document_text(url: str) -> str:
+# --- CORRECTED FUNCTION: Handles both URLs and binary file content ---
+def get_document_text(source) -> str:
     """
-    Downloads a document from a URL and extracts its text.
-    Currently supports PDF files.
+    Extracts text from a document, handling either a URL or raw binary content.
     """
-    print(f"Downloading document from {url}...")
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"Error downloading the document: {e}")
+    document_content = None
+
+    if isinstance(source, str):  # If the source is a URL string
+        print(f"Downloading document from {source}...")
+        try:
+            response = requests.get(source)
+            response.raise_for_status()
+            document_content = response.content
+        except requests.exceptions.RequestException as e:
+            print(f"Error downloading the document: {e}")
+            return ""
+    elif isinstance(source, bytes):  # If the source is raw file content (from upload)
+        print("Processing uploaded document content...")
+        document_content = source
+    else:
+        print("Invalid source type provided to get_document_text.")
         return ""
 
-    document_content = response.content
+    if not document_content:
+        return ""
 
     print("Extracting text from the document...")
     document_text = ""
@@ -46,9 +57,9 @@ def get_document_text(url: str) -> str:
 
     return document_text
 
-def create_document_id(url: str) -> str:
+def create_document_id(source: str) -> str:
     """Creates a stable SHA256 hash of the URL to use as a document ID."""
-    return hashlib.sha256(url.encode()).hexdigest()
+    return hashlib.sha256(source.encode()).hexdigest()
 
 def split_text_into_chunks(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list[str]:
     """
@@ -106,8 +117,6 @@ def generate_embeddings(text_chunks: list[str]) -> list:
     
     return embeddings
 
-# In data_processor.py
-
 def index_chunks_in_pinecone(chunks: list[str], embeddings: list, index_name: str, namespace: str):
     """
     Indexes the text chunks and their embeddings in a specific Pinecone namespace.
@@ -148,7 +157,7 @@ def index_chunks_in_pinecone(chunks: list[str], embeddings: list, index_name: st
 
         print(f"Successfully indexed {len(chunks)} chunks in namespace '{namespace}'.")
         # Give a moment for the index to become queryable
-        time.sleep(5) 
+        time.sleep(5)
         
     except Exception as e:
         print(f"Error indexing in Pinecone: {e}")
