@@ -130,3 +130,12 @@ This project is configured for deployment on **Render.com**. Both the backend an
 
   * **Backend:** Deployed as a **Web Service**, pointing to the `hackathon-project` root directory.
   * **Frontend:** Deployed as a **Static Site**, pointing to the `frontend` root directory with the build command `npm run build` and publish directory `dist`. Remember to configure the environment variables with your live backend URL.
+
+### Developed By
+
+This project has been developed by:
+Pragyan Srivastava (pragyan20github)
+Vanshita Bihani
+Gracy Shivhare (gracyshivhare)
+Yoshita Banerjee (YoshitaB)
+Hemal Vadaliya
