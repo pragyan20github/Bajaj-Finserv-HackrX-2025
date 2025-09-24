@@ -134,8 +134,8 @@ This project is configured for deployment on **Render.com**. Both the backend an
 ### Developed By
 
 This project has been developed by:
-Pragyan Srivastava (pragyan20github)
-Vanshita Bihani
-Gracy Shivhare (gracyshivhare)
-Yoshita Banerjee (YoshitaB)
-Hemal Vadaliya
+* **Pragyan Srivastava** (pragyan20github)
+* **Vanshita Bihani**
+* **Gracy Shivhare** (gracyshivhare)
+* **Yoshita Banerjee** (YoshitaB)
+* **Hemal Vadaliya**
