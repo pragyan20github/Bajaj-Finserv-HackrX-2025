@@ -124,7 +124,7 @@ The primary backend endpoint for interaction is:
 
 -----
 
-### Deployment
+### Deployment 
 
 This project is configured for deployment on **Render.com**. Both the backend and frontend are hosted as separate services.
 
